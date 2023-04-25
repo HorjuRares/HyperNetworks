@@ -27,13 +27,15 @@ transform_test = transforms.Compose([
 
 trainset = torchvision.datasets.CIFAR10(root='../data', train=True,
                                         download=True, transform=transform_train)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=128,
-                                          shuffle=True, num_workers=4)
+# trainloader = torch.utils.data.DataLoader(trainset, batch_size=4,
+#                                           shuffle=True, num_workers=1)
+
+trainset_loader = torch.utils.data.DataLoader(trainset, batch_size=4, shuffle=True, num_workers=1)
 
 testset = torchvision.datasets.CIFAR10(root='../data', train=False,
                                        download=True, transform=transform_test)
-testloader = torch.utils.data.DataLoader(testset, batch_size=128,
-                                         shuffle=False, num_workers=4)
+testloader = torch.utils.data.DataLoader(testset, batch_size=4,
+                                         shuffle=False, num_workers=1)
 
 classes = ('plane', 'car', 'bird', 'cat',
            'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
@@ -48,7 +50,7 @@ args = parser.parse_args()
 
 ############
 
-net = PrimaryNetwork()
+net = PrimaryNetwork().to(device='cuda' if torch.cuda.is_available() else 'cpu')
 best_accuracy = 0.
 
 if args.resume:
@@ -56,7 +58,7 @@ if args.resume:
     net.load_state_dict(ckpt['net'])
     best_accuracy = ckpt['acc']
 
-net.cuda()
+# net.cuda()
 
 learning_rate = 0.002
 weight_decay = 0.0005
@@ -70,13 +72,14 @@ criterion = nn.CrossEntropyLoss()
 total_iter = 0
 epochs = 0
 print_freq = 50
+
 while total_iter < max_iter:
 
     running_loss = 0.0
 
-    for i, data in enumerate(trainloader, 0):
+    for d in enumerate(trainset_loader):
 
-        inputs, labels = data
+        # inputs, labels = data
 
         inputs, labels = Variable(inputs.cuda()), Variable(labels.cuda())
 

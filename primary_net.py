@@ -64,7 +64,7 @@ class PrimaryNetwork(nn.Module):
             self.zs.append(Embedding(self.zs_size[i], self.z_dim))
 
         self.global_avg = nn.AvgPool2d(8)
-        self.final = nn.Linear(64,10)
+        self.final = nn.Linear(64, 10)
 
     def forward(self, x):
 
@@ -77,6 +77,11 @@ class PrimaryNetwork(nn.Module):
             x = self.res_net[i](x, w1, w2)
 
         x = self.global_avg(x)
-        x = self.final(x.view(-1,64))
+        # x = self.final(x.view(-1,64))
 
         return x
+
+
+net = PrimaryNetwork().to('cuda')
+y = net(torch.rand((1, 3, 256, 256)).to('cuda'))
+print(y.shape)

@@ -1,10 +1,11 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
+from torchvision.models.resnet import resnet18
 
 
 class HyperNetwork(nn.Module):
-
     def __init__(self, f_size = 3, z_dim = 64, out_size=16, in_size=16):
         super(HyperNetwork, self).__init__()
         self.z_dim = z_dim
@@ -12,14 +13,17 @@ class HyperNetwork(nn.Module):
         self.out_size = out_size
         self.in_size = in_size
 
-        self.w1 = Parameter(torch.fmod(torch.randn((self.z_dim, self.out_size*self.f_size*self.f_size)).cuda(),2))
-        self.b1 = Parameter(torch.fmod(torch.randn((self.out_size*self.f_size*self.f_size)).cuda(),2))
+        # K of size NinFsize x NoutFsize
+        # the second layer concatenates the anterior generated weights into K
+        self.w1 = Parameter(torch.fmod(torch.randn((self.z_dim, self.out_size*self.f_size*self.f_size)), 2))  # wout
+        self.b1 = Parameter(torch.fmod(torch.randn((self.out_size*self.f_size*self.f_size)), 2))  # bout
 
-        self.w2 = Parameter(torch.fmod(torch.randn((self.z_dim, self.in_size*self.z_dim)).cuda(),2))
-        self.b2 = Parameter(torch.fmod(torch.randn((self.in_size*self.z_dim)).cuda(),2))
+        # the first layer generates Nin tensors
+        self.w2 = Parameter(torch.fmod(torch.randn((self.z_dim, self.in_size*self.z_dim)), 2))  # wi
+        self.b2 = Parameter(torch.fmod(torch.randn((self.in_size*self.z_dim)), 2))  # bi
 
     def forward(self, z):
-
+        # where z is zj (the layer embedding)
         h_in = torch.matmul(z, self.w2) + self.b2
         h_in = h_in.view(self.in_size, self.z_dim)
 
@@ -28,6 +32,77 @@ class HyperNetwork(nn.Module):
 
         return kernel
 
+
+class Embedding(nn.Module):
+    def __init__(self, z_num, z_dim, in_size, out_size, f_size):
+        super(Embedding, self).__init__()
+
+        self.z_list = nn.ParameterList()
+        self.z_num = z_num  # number of embeddings to be concatenated
+        # in the paper they consider every filter size to be a multiple of 16, so most probably this is
+        # going to be useless
+        self.z_dim = z_dim  # embedding dimension
+
+        h, k = self.z_num
+
+        for i in range(h):
+            for j in range(k):
+                self.z_list.append(Parameter(torch.fmod(torch.randn(self.z_dim), 2)))
+
+        self.hyper_net = HyperNetwork(f_size=f_size, z_dim=z_dim, out_size=out_size, in_size=in_size)
+
+    def forward(self):
+        ww = []
+        h, k = self.z_num
+
+        # compose the resulting Kernel which has the size a multiple of 16
+        for i in range(h):
+            w = []
+            for j in range(k):
+                w.append(self.hyper_net(self.z_list[i*k + j]))
+            ww.append(torch.cat(w, dim=1))
+        return torch.cat(ww, dim=0)
+
+
+def main():
+    conv_layer = nn.Conv2d(in_channels=1, out_channels=64, kernel_size=3, stride=2, padding=0, dilation=1)
+    layer_params = filter(lambda p: p.requires_grad, conv_layer.parameters())
+    layer_params = sum(np.prod(p.size()) for p in layer_params)
+
+    print(layer_params)
+
+    filter_size = conv_layer.kernel_size[0]
+    in_ch = conv_layer.in_channels
+    out_ch = conv_layer.out_channels
+
+    emb = Embedding(z_num=(1, 1), z_dim=16, f_size=filter_size, in_size=in_ch, out_size=out_ch)
+    emb_params = filter(lambda p: p.requires_grad, emb.parameters())
+    emb_params = sum(np.prod(p.size()) for p in emb_params)
+
+    print(emb_params)
+
+    weights = emb()
+    conv_layer.weight.data = weights
+
+    model = resnet18(weights=None)
+    model_params = filter(lambda p: p.requires_grad, model.parameters())
+    model_params = sum(np.prod(p.size()) for p in model_params)
+
+    print(model_params)
+
+    layers = list(model.children())
+    for name, param in model.named_parameters():
+        print(name, param.shape)
+        # layer_children = list(layer.children())
+        # if len(layer_children) > 0:
+        #     for child_layer in layer_children:
+        #         print(child_layer)
+
+    return 0
+
+
+if __name__ == '__main__':
+    main()
 
 
 
