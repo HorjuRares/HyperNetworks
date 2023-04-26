@@ -1,3 +1,5 @@
+import gc
+import time
 import numpy as np
 import torch
 import torch.nn as nn
@@ -6,7 +8,7 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import PolynomialLR as PolyLR
 from hypernetwork_modules import Embedding, HyperNetwork
 from ResNetFunctional import Resnet18
-from torchvision.datasets import CIFAR100, CIFAR100
+from torchvision.datasets import CIFAR100, CIFAR10
 from torchvision import transforms
 
 
@@ -19,7 +21,7 @@ class DNN_ResNetHyperNet(nn.Module):
         self.emb_dim = emb_dim
         self.device = torch.device(device)
 
-        self.model = Resnet18(num_classes=100).to(self.device)
+        self.model = Resnet18(num_classes=10).to(self.device)
         model_params = filter(lambda p: p.requires_grad, self.model.parameters())
         model_params = sum(np.prod(p.size()) for p in model_params)
         print(model_params)
@@ -39,8 +41,6 @@ class DNN_ResNetHyperNet(nn.Module):
         print(model_params)
 
         self.weights = list()
-        for idx_emb, emb in enumerate(self.embeddings_list):
-            self.weights.append(self.embeddings_list[idx_emb](self.HyperNet).to(self.device))
 
         self.criterion = nn.CrossEntropyLoss()
 
@@ -49,9 +49,9 @@ class DNN_ResNetHyperNet(nn.Module):
                        {'params': self.embeddings_list.parameters()}]
 
         self.optimizer = torch.optim.SGD(params=self.params, lr=0.003, momentum=0.9)
-        self.lr_scheduler = PolyLR(optimizer=self.optimizer, power=0.9, total_iters=10000)
+        self.lr_scheduler = PolyLR(optimizer=self.optimizer, power=0.9)
 
-        self.batch_size = 1
+        self.batch_size = 64
         self.num_workers = 0
         self.shuffle = True
         self.epochs = 1000
@@ -101,9 +101,14 @@ class DNN_ResNetHyperNet(nn.Module):
         self.embeddings_list.train()
         self.model.train()
 
+        start_time = time.time()
+
         for batch_idx, batch_data in enumerate(self.trainset_dataloader):
             inputs = batch_data[0].to(self.device)
             labels = batch_data[1].to(self.device)
+
+            for idx_emb, emb in enumerate(self.embeddings_list):
+                self.weights.append(self.embeddings_list[idx_emb](self.HyperNet).to(self.device))
 
             output = self.model(inputs, self.weights)
             loss = self.criterion(output, labels)
@@ -113,9 +118,16 @@ class DNN_ResNetHyperNet(nn.Module):
 
             # backprop
             self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
             self.lr_scheduler.step()
 
+            self.weights.clear()
+            gc.collect()
+
             train_loss += loss
+
+        end_time = time.time()
 
         # validation
         print('Validation loop ...')
@@ -124,24 +136,38 @@ class DNN_ResNetHyperNet(nn.Module):
         self.embeddings_list.eval()
         self.model.eval()
 
+        total = 0
+        correct = 0
+
         for batch_idx, batch_data in enumerate(self.valset_dataloader):
             inputs = batch_data[0].to(self.device)
             labels = batch_data[1].to(self.device)
+
+            for idx_emb, emb in enumerate(self.embeddings_list):
+                self.weights.append(self.embeddings_list[idx_emb](self.HyperNet).to(self.device))
 
             output = self.model(inputs, self.weights)
             loss = self.criterion(output, labels)
             val_loss += loss
 
+            total += labels.shape
+            correct += torch.sum((labels == torch.max(input=output, dim=1)))
+
         if epoch % 50 == 0:
             self.save_model(epoch=epoch, loss=val_loss)
 
+        accuracy = 100. * correct / total
+
         print("Finished epoch ", epoch)
+        print("Training took: {}".format(end_time -start_time))
         print("Training loss: ", train_loss)
-        print("Validation loss: ", val_loss)
+        print("Validation loss: ", val_loss, "Validation accuracy:", accuracy)
 
 
 
 def main():
+    torch.autograd.set_detect_anomaly(True)
+
     transform = transforms.Compose([
                 transforms.Resize((320, 320)),
                 transforms.ToTensor(),
@@ -150,14 +176,17 @@ def main():
                     std=[0.2023, 0.1994, 0.2010],
                 )])
 
-    train_dataset = torch.utils.data.Subset(
-        CIFAR100(train=True, download=True, root='./data', transform=transform),
-        torch.arange(0, 100))
-    test_dataset = torch.utils.data.Subset(
-        CIFAR100(train=False, download=True, root='./data', transform=transform),
-        torch.arange(0, 100))
+    # train_dataset = torch.utils.data.Subset(
+    #     CIFAR100(train=True, download=True, root='./data', transform=transform),
+    #     torch.arange(0, 1000))
+    # test_dataset = torch.utils.data.Subset(
+    #     CIFAR100(train=False, download=True, root='./data', transform=transform),
+    #     torch.arange(0, 100))
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    train_dataset = CIFAR10(train=True, download=True, root='./data', transform=transform)
+    test_dataset = CIFAR10(train=False, download=True, root='./data', transform=transform)
+
+    device = 'cuda'
     dnn = DNN_ResNetHyperNet(device=device)
 
     model_params = filter(lambda p: p.requires_grad, dnn.parameters())
