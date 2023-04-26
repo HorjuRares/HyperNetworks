@@ -96,7 +96,7 @@ def main():
     model_params = filter(lambda p: p.requires_grad, model.parameters())
     model_params = sum(np.prod(p.size()) for p in model_params)
 
-    # print(model_params)
+    print(model_params)
 
     layers = list(model.children())
     for layer in layers:
