@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import PolynomialLR as PolyLR
 from hypernetwork_modules import Embedding, HyperNetwork
 from ResNetFunctional import Resnet18
-from torchvision.datasets import CIFAR100, CIFAR10
+from torchvision.datasets import CIFAR100, CIFAR100
 from torchvision import transforms
 
 
@@ -19,7 +19,7 @@ class DNN_ResNetHyperNet(nn.Module):
         self.emb_dim = emb_dim
         self.device = torch.device(device)
 
-        self.model = Resnet18(num_classes=10).to(self.device)
+        self.model = Resnet18(num_classes=100).to(self.device)
         model_params = filter(lambda p: p.requires_grad, self.model.parameters())
         model_params = sum(np.prod(p.size()) for p in model_params)
         print(model_params)
@@ -150,8 +150,12 @@ def main():
                     std=[0.2023, 0.1994, 0.2010],
                 )])
 
-    train_dataset = CIFAR10(train=True, download=True, root='./data', transform=transform)
-    test_dataset = CIFAR10(train=False, download=True, root='./data', transform=transform)
+    train_dataset = torch.utils.data.Subset(
+        CIFAR100(train=True, download=True, root='./data', transform=transform),
+        torch.arange(0, 100))
+    test_dataset = torch.utils.data.Subset(
+        CIFAR100(train=False, download=True, root='./data', transform=transform),
+        torch.arange(0, 100))
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     dnn = DNN_ResNetHyperNet(device=device)
