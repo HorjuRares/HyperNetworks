@@ -78,21 +78,25 @@ def main():
     hyp_params = sum(np.prod(p.size()) for p in hyp_params)
     print('hyp:', hyp_params)
 
-    emb = Embedding(z_num=(1, 1), z_dim=64)
+    emb = Embedding(z_num=(8, 4), z_dim=64)
     emb_params = filter(lambda p: p.requires_grad, emb.parameters())
     emb_params = sum(np.prod(p.size()) for p in emb_params)
 
     print('emb:', emb_params)
 
-    # weights = emb(hyper_net)
-    # print(weights.size())
+    weights = emb(hyper_net)
+    print(weights.size())
     # conv_layer.weight.data = weights
+
+    x = torch.randn(size=(1, 64, 20, 20))
+    x = nn.functional.conv2d(x, weight=weights, stride=1, padding=1)
+    print("x.shape:", x.shape)
 
     model = resnet18(weights=None)
     model_params = filter(lambda p: p.requires_grad, model.parameters())
     model_params = sum(np.prod(p.size()) for p in model_params)
 
-    print(model_params)
+    # print(model_params)
 
     layers = list(model.children())
     for layer in layers:
@@ -106,17 +110,26 @@ def main():
     #
     # base_params = model_params - number_of_conv_params
     #
-    # embeddings_sizes = [[4, 4], [4, 4], [4, 4], [4, 4], [4, 8], [8, 8], [8, 8], [8, 8],
-    #                     [8, 16], [16, 16], [16, 16], [16, 16], [16, 32], [32, 32], [32, 32], [32, 32]]
-    # embeddings_list = nn.ModuleList()
-    # for i in range(len(embeddings_sizes)):
-    #     embeddings_list.append(Embedding(z_num=embeddings_sizes[i], z_dim=64))
+    # multiples of 16 in ored to generate weights for F.conv2D's in Resnet
+    embeddings_sizes = [[4, 4], [4, 4], [4, 4], [4, 4], [4, 8], [8, 8], [8, 8], [8, 8],
+                        [8, 16], [16, 16], [16, 16], [16, 16], [16, 32], [32, 32], [32, 32], [32, 32]]
+    embeddings_list = nn.ModuleList()
+    for i in range(len(embeddings_sizes)):
+        embeddings_list.append(Embedding(z_num=embeddings_sizes[i], z_dim=64))
     #     emb_params = filter(lambda p: p.requires_grad, embeddings_list[i].parameters())
     #     emb_params = sum(np.prod(p.size()) for p in emb_params)
     #     print(emb_params)
     #     hyp_params += emb_params
     #
     # hyp_params += base_params
+
+    # let's see if I'm dumb or not, probably I am
+    # resnet_block = layers[4]
+    # print(resnet_block)
+    # x = torch.zeros(size=(1, 64, 10, 10))
+    # x = resnet_block(x)
+    # print(x.shape)
+    # Well, I'm not :))
 
     return 0
 
