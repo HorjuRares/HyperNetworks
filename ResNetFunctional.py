@@ -22,7 +22,7 @@ class ResNetBasicBlock(nn.Module):
         self.stride = stride
 
         self.bn1 = nn.BatchNorm2d(self.out_channels)
-        self.relu = nn.LeakyReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=True)
         self.bn2 = nn.BatchNorm2d(self.out_channels)
 
         self.downsample = None
@@ -77,7 +77,7 @@ class Resnet18(nn.Module):
 
         self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(num_features=64)
-        self.relu = nn.LeakyReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
         self.resnet_block_1 = ResNetBlock(in_channels=64, out_channels=64, stride=1, downsample=False)
         self.resnet_block_2 = ResNetBlock(in_channels=64, out_channels=128, stride=2, downsample=True)

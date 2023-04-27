@@ -13,7 +13,7 @@ from torchvision import transforms
 
 
 class DNN_ResNetHyperNet(nn.Module):
-    def __init__(self, emb_dim: int = 64, device: str ='cuda', train: bool = True):
+    def __init__(self, num_classes: int, emb_dim: int = 64, device: str ='cuda', train: bool = True):
         super(DNN_ResNetHyperNet, self).__init__()
 
         self.dnn_name = 'DNN_ResNetHyperNet'
@@ -21,7 +21,7 @@ class DNN_ResNetHyperNet(nn.Module):
         self.emb_dim = emb_dim
         self.device = torch.device(device)
 
-        self.model = Resnet18(num_classes=10).to(self.device)
+        self.model = Resnet18(num_classes=num_classes).to(self.device)
         model_params = filter(lambda p: p.requires_grad, self.model.parameters())
         model_params = sum(np.prod(p.size()) for p in model_params)
         print(model_params)
@@ -48,8 +48,11 @@ class DNN_ResNetHyperNet(nn.Module):
                        {'params': self.model.parameters()},
                        {'params': self.embeddings_list.parameters()}]
 
-        self.optimizer = torch.optim.SGD(params=self.params, lr=0.003, momentum=0.9)
-        self.lr_scheduler = PolyLR(optimizer=self.optimizer, power=0.9)
+        # self.optimizer = torch.optim.SGD(params=self.params, lr=0.003, momentum=0.9)
+        self.optimizer = torch.optim.Adam(params=self.params)
+        # self.lr_scheduler = PolyLR(optimizer=self.optimizer, power=0.9)
+        self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=self.optimizer,
+                                                                       T_max=128, eta_min=1e-4)
 
         self.batch_size = 64
         self.num_workers = 0
@@ -125,7 +128,7 @@ class DNN_ResNetHyperNet(nn.Module):
             self.weights.clear()
             gc.collect()
 
-            train_loss += loss
+            train_loss += loss.detach().cpu().numpy()
 
         end_time = time.time()
 
@@ -139,29 +142,39 @@ class DNN_ResNetHyperNet(nn.Module):
         total = 0
         correct = 0
 
-        for batch_idx, batch_data in enumerate(self.valset_dataloader):
-            inputs = batch_data[0].to(self.device)
-            labels = batch_data[1].to(self.device)
+        with torch.no_grad():
+            for batch_idx, batch_data in enumerate(self.valset_dataloader):
+                inputs = batch_data[0].to(self.device)
+                labels = batch_data[1].to(self.device)
 
-            for idx_emb, emb in enumerate(self.embeddings_list):
-                self.weights.append(self.embeddings_list[idx_emb](self.HyperNet).to(self.device))
+                for idx_emb, emb in enumerate(self.embeddings_list):
+                    self.weights.append(self.embeddings_list[idx_emb](self.HyperNet).to(self.device))
 
-            output = self.model(inputs, self.weights)
-            loss = self.criterion(output, labels)
-            val_loss += loss
+                output = self.model(inputs, self.weights)
+                loss = self.criterion(output, labels)
+                val_loss += loss.detach().cpu().numpy()
 
-            total += labels.shape
-            correct += torch.sum((labels == torch.max(input=output, dim=1)))
+                total += labels.shape[0]
+                x = (labels == torch.argmax(output, dim=1)).detach().cpu().numpy()
+                correct += np.count_nonzero(x)
 
-        if epoch % 50 == 0:
-            self.save_model(epoch=epoch, loss=val_loss)
+                self.weights.clear()
+                output = None
 
-        accuracy = 100. * correct / total
+                gc.collect()
 
-        print("Finished epoch ", epoch)
-        print("Training took: {}".format(end_time -start_time))
-        print("Training loss: ", train_loss)
-        print("Validation loss: ", val_loss, "Validation accuracy:", accuracy)
+            if epoch % 50 == 0:
+                self.save_model(epoch=epoch, loss=val_loss)
+
+            print('correct: ', correct)
+            print('total:', total)
+
+            accuracy = 100. * correct / total
+
+            print("Finished epoch ", epoch)
+            print("Training took: {}".format(end_time -start_time))
+            print("Training loss: ", train_loss)
+            print("Validation loss: ", val_loss, "Validation accuracy:", "{}%".format(accuracy))
 
 
 
@@ -176,6 +189,7 @@ def main():
                     std=[0.2023, 0.1994, 0.2010],
                 )])
 
+
     # train_dataset = torch.utils.data.Subset(
     #     CIFAR100(train=True, download=True, root='./data', transform=transform),
     #     torch.arange(0, 1000))
@@ -183,17 +197,29 @@ def main():
     #     CIFAR100(train=False, download=True, root='./data', transform=transform),
     #     torch.arange(0, 100))
 
-    train_dataset = CIFAR10(train=True, download=True, root='./data', transform=transform)
-    test_dataset = CIFAR10(train=False, download=True, root='./data', transform=transform)
+    train_dataset_original = CIFAR10(train=True, download=True, root='./data', transform=transform)
+    test_dataset_original = CIFAR10(train=False, download=True, root='./data', transform=transform)
+
+    nc = len(train_dataset_original.classes)
+
+    import random
+    train_samples = torch.tensor(random.sample(range(len(train_dataset_original)),
+                                               int(len(train_dataset_original) / 100)))
+    test_samples = torch.tensor(random.sample(range(len(test_dataset_original)),
+                                              int(len(test_dataset_original) / 100)))
+
+    train_dataset = torch.utils.data.Subset(train_dataset_original, train_samples)
+    val_dataset = torch.utils.data.Subset(train_dataset_original, test_samples)
+    test_dataset = torch.utils.data.Subset(test_dataset_original, test_samples)
 
     device = 'cuda'
-    dnn = DNN_ResNetHyperNet(device=device)
+    dnn = DNN_ResNetHyperNet(device=device, num_classes=nc)
 
     model_params = filter(lambda p: p.requires_grad, dnn.parameters())
     model_params = sum(np.prod(p.size()) for p in model_params)
     print(model_params)
 
-    dnn.load_dataset(train_dataset, train_dataset, test_dataset)
+    dnn.load_dataset(train_dataset, val_dataset, test_dataset)
     dnn.train()
 
 
