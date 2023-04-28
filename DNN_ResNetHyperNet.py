@@ -14,7 +14,7 @@ from torchvision import transforms
 
 
 class DNN_ResNetHyperNet(nn.Module):
-    def __init__(self, num_classes: int, emb_dim: int = 128, device: str ='cuda', train: bool = True):
+    def __init__(self, num_classes: int, emb_dim: int = 64, device: str ='cuda', train: bool = True):
         super(DNN_ResNetHyperNet, self).__init__()
 
         self.dnn_name = 'DNN_ResNetHyperNet'
@@ -27,15 +27,15 @@ class DNN_ResNetHyperNet(nn.Module):
         model_params = sum(np.prod(p.size()) for p in model_params)
         print(model_params)
 
-        self.HyperNet = HyperNetwork(z_dim=emb_dim, in_size=32, out_size=32).to(self.device)
+        self.HyperNet = HyperNetwork(z_dim=emb_dim, in_size=16, out_size=16).to(self.device)
         model_params = filter(lambda p: p.requires_grad, self.HyperNet.parameters())
         model_params = sum(np.prod(p.size()) for p in model_params)
         print(model_params)
 
-        # self.embeddings_sizes = [[4, 4], [4, 4], [4, 4], [4, 4], [8, 4], [8, 8], [8, 8], [8, 8],
-        #                 [16, 8], [16, 16], [16, 16], [16, 16], [32, 16], [32, 32], [32, 32], [32, 32]]
-        self.embeddings_sizes = [[2, 2], [2, 2], [2, 2], [2, 2], [4, 2], [4, 4], [4, 4], [4, 4],
-                        [8, 4], [8, 8], [8, 8], [8, 8], [16, 8], [16, 16], [16, 16], [16, 16]]
+        self.embeddings_sizes = [[4, 4], [4, 4], [4, 4], [4, 4], [8, 4], [8, 8], [8, 8], [8, 8],
+                        [16, 8], [16, 16], [16, 16], [16, 16], [32, 16], [32, 32], [32, 32], [32, 32]]
+        # self.embeddings_sizes = [[2, 2], [2, 2], [2, 2], [2, 2], [4, 2], [4, 4], [4, 4], [4, 4],
+        #                 [8, 4], [8, 8], [8, 8], [8, 8], [16, 8], [16, 16], [16, 16], [16, 16]]
 
         self.embeddings_list = nn.ModuleList().to(device)
         for i in range(len(self.embeddings_sizes)):
@@ -138,19 +138,20 @@ class DNN_ResNetHyperNet(nn.Module):
             # model_after = list(p.data for p in self.model.parameters())
 
             # backprop
-            self.hyp_optimizer.zero_grad()
-            self.emb_optimizer.zero_grad()
             self.model_optimizer.zero_grad()
+            self.emb_optimizer.zero_grad()
+            self.hyp_optimizer.zero_grad()
+
 
             loss.backward()
 
-            self.hyp_optimizer.step()
-            self.emb_optimizer.step()
             self.model_optimizer.step()
+            self.emb_optimizer.step()
+            self.hyp_optimizer.step()
 
-            self.hyp_lr_scheduler.step()
-            self.emb_lr_scheduler.step()
             self.model_lr_scheduler.step()
+            self.emb_lr_scheduler.step()
+            self.hyp_lr_scheduler.step()
 
             self.weights.clear()
             gc.collect()
@@ -256,24 +257,6 @@ def main():
     model_params = filter(lambda p: p.requires_grad, dnn.parameters())
     model_params = sum(np.prod(p.size()) for p in model_params)
     print(model_params)
-
-    from torchview import draw_graph
-
-    # Random test sample and forward propagation
-    # x = torch.rand((1, 3, 320, 320))
-    # weights = []
-    # for idx_emb, emb in enumerate(dnn.embeddings_list):
-    #     weights.append(dnn.embeddings_list[idx_emb](dnn.HyperNet))
-    #
-    # draw_graph(model=dnn,
-    #            # input_data=(x, weights),
-    #            input_data=x,
-    #            graph_name=dnn.dnn_name,
-    #            directory='.',
-    #            save_graph=True,
-    #            hide_inner_tensors=True,
-    #            hide_module_functions=True,
-    #            expand_nested=True)
 
     dnn.load_dataset(train_dataset, val_dataset, test_dataset)
     dnn.train()
