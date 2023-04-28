@@ -83,7 +83,11 @@ class DNN_ResNetHyperNet(nn.Module):
         torch.save({
             'epoch': epoch,
             'model_optimizer_state_dict': self.model_optimizer.state_dict(),
-            'lr_scheduler_state_dict': self.model_lr_scheduler.state_dict(),
+            'hyp_optimizer_state_dict': self.hyp_optimizer.state_dict(),
+            'emb_optimizer_state_dict': self.emb_optimizer.state_dict(),
+            'model_lr_scheduler_state_dict': self.model_lr_scheduler.state_dict(),
+            'hyp_lr_scheduler_state_dict': self.hyp_lr_scheduler.state_dict(),
+            'emb_lr_scheduler_state_dict': self.emb_lr_scheduler.state_dict(),
             'loss': loss,
             'hypernetwork_state_dict': self.HyperNet.state_dict(),
             'embeddings_state_dict': self.embeddings_list.state_dict(),
@@ -116,14 +120,12 @@ class DNN_ResNetHyperNet(nn.Module):
             inputs = batch_data[0].to(self.device)
             labels = batch_data[1].to(self.device)
 
-            before = list(torch.clone(p.data.detach()) for p in self.HyperNet.parameters())
-            emb_before = list(torch.clone(p.data.detach()) for p in self.embeddings_list.parameters())
-            model_before = list(torch.clone(p.data.detach()) for p in self.model.parameters())
+            # before = list(torch.clone(p.data.detach()) for p in self.HyperNet.parameters())
+            # emb_before = list(torch.clone(p.data.detach()) for p in self.embeddings_list.parameters())
+            # model_before = list(torch.clone(p.data.detach()) for p in self.model.parameters())
 
             for idx_emb, emb in enumerate(self.embeddings_list):
                 self.weights.append(self.embeddings_list[idx_emb](self.HyperNet).to(self.device))
-                # self.weights[idx_emb].requires_grad = True
-                # self.weights[idx_emb].retains_grad = True
 
             output = self.model(inputs, self.weights)
             loss = self.criterion(output, labels)
@@ -131,9 +133,9 @@ class DNN_ResNetHyperNet(nn.Module):
             print('Train loss {}/{}: {}'. format(1 + batch_idx, len(self.trainset_dataloader),
                                                  loss.detach().cpu().numpy()))
 
-            after = list(p.data for p in self.HyperNet.parameters())
-            emb_after = list(p.data for p in self.embeddings_list.parameters())
-            model_after = list(p.data for p in self.model.parameters())
+            # after = list(p.data for p in self.HyperNet.parameters())
+            # emb_after = list(p.data for p in self.embeddings_list.parameters())
+            # model_after = list(p.data for p in self.model.parameters())
 
             # backprop
             self.hyp_optimizer.zero_grad()
@@ -181,7 +183,6 @@ class DNN_ResNetHyperNet(nn.Module):
                 inputs = batch_data[0].to(self.device)
                 labels = batch_data[1].to(self.device)
 
-                # TODO: MOVE THIS TO THE __INIT__ WEIGHTS SHOULD BE ADJUSTED TOO, YOU STUPID SOB
                 for idx_emb, emb in enumerate(self.embeddings_list):
                     self.weights.append(self.embeddings_list[idx_emb](self.HyperNet).to(self.device))
 
@@ -239,11 +240,11 @@ def main():
 
     import random
     train_samples = torch.tensor(random.sample(range(len(train_dataset_original)),
-                                               # int(len(train_dataset_original) * 0.8)))
-                                               6 * 64))
+                                               int(len(train_dataset_original) * 0.7)))
+                                               # 6 * 64))
     test_samples = torch.tensor(random.sample(range(len(test_dataset_original)),
-                                              # int(len(test_dataset_original) * 0.2)))
-                                              2 * 64))
+                                              int(len(test_dataset_original) * 0.2)))
+                                              # 2 * 64))
 
     train_dataset = torch.utils.data.Subset(train_dataset_original, train_samples)
     val_dataset = torch.utils.data.Subset(train_dataset_original, test_samples)
@@ -274,7 +275,7 @@ def main():
     #            hide_module_functions=True,
     #            expand_nested=True)
 
-    dnn.load_dataset(train_dataset, train_dataset, test_dataset)
+    dnn.load_dataset(train_dataset, val_dataset, test_dataset)
     dnn.train()
 
 
