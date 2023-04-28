@@ -1,3 +1,4 @@
+import copy
 import gc
 import time
 import numpy as np
@@ -13,7 +14,7 @@ from torchvision import transforms
 
 
 class DNN_ResNetHyperNet(nn.Module):
-    def __init__(self, num_classes: int, emb_dim: int = 64, device: str ='cuda', train: bool = True):
+    def __init__(self, num_classes: int, emb_dim: int = 128, device: str ='cuda', train: bool = True):
         super(DNN_ResNetHyperNet, self).__init__()
 
         self.dnn_name = 'DNN_ResNetHyperNet'
@@ -26,13 +27,16 @@ class DNN_ResNetHyperNet(nn.Module):
         model_params = sum(np.prod(p.size()) for p in model_params)
         print(model_params)
 
-        self.HyperNet = HyperNetwork(z_dim=emb_dim).to(self.device)
+        self.HyperNet = HyperNetwork(z_dim=emb_dim, in_size=32, out_size=32).to(self.device)
         model_params = filter(lambda p: p.requires_grad, self.HyperNet.parameters())
         model_params = sum(np.prod(p.size()) for p in model_params)
         print(model_params)
 
-        self.embeddings_sizes = [[4, 4], [4, 4], [4, 4], [4, 4], [8, 4], [8, 8], [8, 8], [8, 8],
-                        [16, 8], [16, 16], [16, 16], [16, 16], [32, 16], [32, 32], [32, 32], [32, 32]]
+        # self.embeddings_sizes = [[4, 4], [4, 4], [4, 4], [4, 4], [8, 4], [8, 8], [8, 8], [8, 8],
+        #                 [16, 8], [16, 16], [16, 16], [16, 16], [32, 16], [32, 32], [32, 32], [32, 32]]
+        self.embeddings_sizes = [[2, 2], [2, 2], [2, 2], [2, 2], [4, 2], [4, 4], [4, 4], [4, 4],
+                        [8, 4], [8, 8], [8, 8], [8, 8], [16, 8], [16, 16], [16, 16], [16, 16]]
+
         self.embeddings_list = nn.ModuleList().to(device)
         for i in range(len(self.embeddings_sizes)):
             self.embeddings_list.append(Embedding(z_num=self.embeddings_sizes[i], z_dim=self.emb_dim).to(self.device))
@@ -41,23 +45,25 @@ class DNN_ResNetHyperNet(nn.Module):
         print(model_params)
 
         self.weights = list()
+        # for idx_emb, emb in enumerate(self.embeddings_list):
+        #     self.weights.append(self.embeddings_list[idx_emb](self.HyperNet).to(self.device))
 
         self.criterion = nn.CrossEntropyLoss()
 
-        self.params = [{'params': self.HyperNet.parameters()},
-                       {'params': self.model.parameters()},
-                       {'params': self.embeddings_list.parameters()}]
-
         # self.optimizer = torch.optim.SGD(params=self.params, lr=0.003, momentum=0.9)
-        self.optimizer = torch.optim.Adam(params=self.params)
-        # self.lr_scheduler = PolyLR(optimizer=self.optimizer, power=0.9)
-        self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=self.optimizer,
-                                                                       T_max=128, eta_min=1e-4)
+        self.model_optimizer = torch.optim.Adam(params=self.model.parameters())
+        self.emb_optimizer = torch.optim.Adam(params=self.embeddings_list.parameters())
+        self.hyp_optimizer = torch.optim.Adam(params=self.HyperNet.parameters())
+
+        self.model_lr_scheduler = PolyLR(optimizer=self.model_optimizer, power=0.9, total_iters=100)
+        self.emb_lr_scheduler = PolyLR(optimizer=self.emb_optimizer, power=0.9, total_iters=100)
+        self.hyp_lr_scheduler = PolyLR(optimizer=self.hyp_optimizer, power=0.9, total_iters=100)
+        # self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=self.optimizer, eta_min=1e-4, T_max=)
 
         self.batch_size = 64
         self.num_workers = 0
         self.shuffle = True
-        self.epochs = 1000
+        self.epochs = 1001
 
         self.trainset_dataloader = None
         self.valset_dataloader = None
@@ -76,8 +82,8 @@ class DNN_ResNetHyperNet(nn.Module):
 
         torch.save({
             'epoch': epoch,
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'lr_scheduler_state_dict': self.lr_scheduler.state_dict(),
+            'model_optimizer_state_dict': self.model_optimizer.state_dict(),
+            'lr_scheduler_state_dict': self.model_lr_scheduler.state_dict(),
             'loss': loss,
             'hypernetwork_state_dict': self.HyperNet.state_dict(),
             'embeddings_state_dict': self.embeddings_list.state_dict(),
@@ -110,8 +116,14 @@ class DNN_ResNetHyperNet(nn.Module):
             inputs = batch_data[0].to(self.device)
             labels = batch_data[1].to(self.device)
 
+            before = list(torch.clone(p.data.detach()) for p in self.HyperNet.parameters())
+            emb_before = list(torch.clone(p.data.detach()) for p in self.embeddings_list.parameters())
+            model_before = list(torch.clone(p.data.detach()) for p in self.model.parameters())
+
             for idx_emb, emb in enumerate(self.embeddings_list):
                 self.weights.append(self.embeddings_list[idx_emb](self.HyperNet).to(self.device))
+                # self.weights[idx_emb].requires_grad = True
+                # self.weights[idx_emb].retains_grad = True
 
             output = self.model(inputs, self.weights)
             loss = self.criterion(output, labels)
@@ -119,14 +131,36 @@ class DNN_ResNetHyperNet(nn.Module):
             print('Train loss {}/{}: {}'. format(1 + batch_idx, len(self.trainset_dataloader),
                                                  loss.detach().cpu().numpy()))
 
+            after = list(p.data for p in self.HyperNet.parameters())
+            emb_after = list(p.data for p in self.embeddings_list.parameters())
+            model_after = list(p.data for p in self.model.parameters())
+
             # backprop
-            self.optimizer.zero_grad()
+            self.hyp_optimizer.zero_grad()
+            self.emb_optimizer.zero_grad()
+            self.model_optimizer.zero_grad()
+
             loss.backward()
-            self.optimizer.step()
-            self.lr_scheduler.step()
+
+            self.hyp_optimizer.step()
+            self.emb_optimizer.step()
+            self.model_optimizer.step()
+
+            self.hyp_lr_scheduler.step()
+            self.emb_lr_scheduler.step()
+            self.model_lr_scheduler.step()
 
             self.weights.clear()
             gc.collect()
+
+            # for i in range(len(after)):
+            #     print(torch.equal(after[i], before[i]))
+
+            # for i in range(len(emb_after)):
+            #     print(torch.equal(emb_after[i], emb_before[i]))
+
+            # for i in range(len(model_after)):
+            #     print(torch.equal(model_after[i], model_before[i]))
 
             train_loss += loss.detach().cpu().numpy()
 
@@ -147,6 +181,7 @@ class DNN_ResNetHyperNet(nn.Module):
                 inputs = batch_data[0].to(self.device)
                 labels = batch_data[1].to(self.device)
 
+                # TODO: MOVE THIS TO THE __INIT__ WEIGHTS SHOULD BE ADJUSTED TOO, YOU STUPID SOB
                 for idx_emb, emb in enumerate(self.embeddings_list):
                     self.weights.append(self.embeddings_list[idx_emb](self.HyperNet).to(self.device))
 
@@ -204,9 +239,11 @@ def main():
 
     import random
     train_samples = torch.tensor(random.sample(range(len(train_dataset_original)),
-                                               int(len(train_dataset_original) / 100)))
+                                               # int(len(train_dataset_original) * 0.8)))
+                                               6 * 64))
     test_samples = torch.tensor(random.sample(range(len(test_dataset_original)),
-                                              int(len(test_dataset_original) / 100)))
+                                              # int(len(test_dataset_original) * 0.2)))
+                                              2 * 64))
 
     train_dataset = torch.utils.data.Subset(train_dataset_original, train_samples)
     val_dataset = torch.utils.data.Subset(train_dataset_original, test_samples)
@@ -219,7 +256,25 @@ def main():
     model_params = sum(np.prod(p.size()) for p in model_params)
     print(model_params)
 
-    dnn.load_dataset(train_dataset, val_dataset, test_dataset)
+    from torchview import draw_graph
+
+    # Random test sample and forward propagation
+    # x = torch.rand((1, 3, 320, 320))
+    # weights = []
+    # for idx_emb, emb in enumerate(dnn.embeddings_list):
+    #     weights.append(dnn.embeddings_list[idx_emb](dnn.HyperNet))
+    #
+    # draw_graph(model=dnn,
+    #            # input_data=(x, weights),
+    #            input_data=x,
+    #            graph_name=dnn.dnn_name,
+    #            directory='.',
+    #            save_graph=True,
+    #            hide_inner_tensors=True,
+    #            hide_module_functions=True,
+    #            expand_nested=True)
+
+    dnn.load_dataset(train_dataset, train_dataset, test_dataset)
     dnn.train()
 
 
