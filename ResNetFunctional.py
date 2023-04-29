@@ -71,31 +71,59 @@ class ResNetBlock(nn.Module):
         return x
 
 
-class Resnet18(nn.Module):
-    def __init__(self, in_channels: int = 3, num_classes: int = 10):
-        super(Resnet18, self).__init__()
+class ResnetHypernet(nn.Module):
+    def __init__(self, in_channels: int = 3, num_classes: int = 10, type: str = 'resnet18', ):
+        super(ResnetHypernet, self).__init__()
+
+        # self.resnet_block_1 = ResNetBlock(in_channels=64, out_channels=64, stride=1, downsample=False)
+        # self.resnet_block_2 = ResNetBlock(in_channels=64, out_channels=128, stride=2, downsample=True)
+        # self.resnet_block_3 = ResNetBlock(in_channels=128, out_channels=256, stride=2, downsample=True)
+        # self.resnet_block_4 = ResNetBlock(in_channels=256, out_channels=512, stride=2, downsample=True)
+
+        if type == 'resnet18':
+            self.resnet_channels = [(64, 64), (64, 128), (128, 256), (256, 512)]
+            self.resnet_strides = [1, 2, 2, 2]
+            self.resnet_downsampling = [False, True, True, True]
+
+            self.embeddings_sizes = [[4, 4], [4, 4], [4, 4], [4, 4], [8, 4], [8, 8], [8, 8], [8, 8],
+                                     [16, 8], [16, 16], [16, 16], [16, 16], [32, 16], [32, 32], [32, 32], [32, 32]]
+        else:
+            raise NotImplementedError
+
+        self.hypernet = HyperNetwork()
+
+        self.embeddings_list = nn.ModuleList()
+        for emb_idx, _ in enumerate(self.embeddings_sizes):
+            self.embeddings_list.append(Embedding(z_num=self.embeddings_sizes[emb_idx], z_dim=64))
 
         self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(num_features=64)
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
-        self.resnet_block_1 = ResNetBlock(in_channels=64, out_channels=64, stride=1, downsample=False)
-        self.resnet_block_2 = ResNetBlock(in_channels=64, out_channels=128, stride=2, downsample=True)
-        self.resnet_block_3 = ResNetBlock(in_channels=128, out_channels=256, stride=2, downsample=True)
-        self.resnet_block_4 = ResNetBlock(in_channels=256, out_channels=512, stride=2, downsample=True)
+
+        self.resnet_blocks = nn.ModuleList()
+        for block_idx, _ in enumerate(self.resnet_channels):
+            in_channels, out_channels = self.resnet_channels[block_idx]
+            self.resnet_blocks.append(ResNetBlock(in_channels=in_channels,
+                                                  out_channels=out_channels,
+                                                  stride=self.resnet_strides[block_idx],
+                                                  downsample=self.resnet_downsampling[block_idx]))
+
         self.avgpool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
         self.fc = nn.Linear(in_features=512, out_features=num_classes)
 
-    def forward(self, x: torch.Tensor, weights: list):
+    def forward(self, x: torch.Tensor):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
         x = self.pool(x)
 
-        x = self.resnet_block_1(x, weights[:4])
-        x = self.resnet_block_2(x, weights[4:8])
-        x = self.resnet_block_3(x, weights[8:12])
-        x = self.resnet_block_4(x, weights[12:])
+        for block_idx, _ in enumerate(self.resnet_blocks):
+            weights = []
+            for emb_idx in range(block_idx * 4, (block_idx + 1) * 4):
+                weights.append(self.embeddings_list[emb_idx](self.hypernet))
+
+            x = self.resnet_blocks[block_idx](x, weights)
 
         x = self.avgpool(x)
         x = x.view(x.shape[0], x.shape[1])
@@ -105,22 +133,9 @@ class Resnet18(nn.Module):
 
 
 def main():
-    embeddings_sizes = [[4, 4], [4, 4], [4, 4], [4, 4], [8, 4], [8, 8], [8, 8], [8, 8],
-                        [16, 8], [16, 16], [16, 16], [16, 16], [32, 16], [32, 32], [32, 32], [32, 32]]
-    embeddings_list = nn.ModuleList()
-    for i in range(len(embeddings_sizes)):
-        embeddings_list.append(Embedding(z_num=embeddings_sizes[i], z_dim=64))
-
-    hypernetwork = HyperNetwork()
-
-    weights = []
-    for idx_emb, emb in enumerate(embeddings_list):
-        weights.append(embeddings_list[idx_emb](hypernetwork))
-        print(weights[idx_emb].shape)
-
-    model = Resnet18()
+    model = ResnetHypernet()
     x = torch.randn(size=(1, 3, 320, 320))
-    x = model(x, weights)
+    x = model(x)
 
     print(x.shape)
 

@@ -1,21 +1,23 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 import torchvision.transforms as T
 
-from torchvision.datasets import MNIST, CIFAR10
+from torchvision.datasets import CIFAR10
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import PolynomialLR
 
-from MNIST_primary_net import MNIST_PRIMARY_NET
+from ResNetFunctional import ResnetHypernet
 
-transforms = T.Compose([T.ToTensor()])
-train_dataset = MNIST(train=True, root='./data', download=True, transform=transforms)
+
+transform = T.Compose([T.Resize((320, 320)),
+                       T.ToTensor(),
+                       T.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010])])
+train_dataset = CIFAR10(train=True, root='./data', download=True, transform=transform)
 train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=128, num_workers=0)
 
-net = MNIST_PRIMARY_NET()
+net = ResnetHypernet()
 loss_fn = nn.CrossEntropyLoss()
 
 epochs = 1000
@@ -38,7 +40,7 @@ for epoch in range(epochs):
     net.train()
 
     # before
-    before = list(torch.clone(p.data) for p in net.hyp_net.parameters())
+    before = list(torch.clone(p.data) for p in net.hypernet.parameters())
 
     for batch_idx, batch_data in enumerate(train_dataloader):
         inputs = batch_data[0]
