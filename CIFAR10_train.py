@@ -8,16 +8,16 @@ from torchvision.datasets import CIFAR10
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import PolynomialLR
 
-from ResNetFunctional import ResnetHypernet
+from ResNetFunctional import ResnetHypernet, ResNetWithHyperNet
 
 
 transform = T.Compose([T.Resize((320, 320)),
                        T.ToTensor(),
                        T.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010])])
 train_dataset = CIFAR10(train=True, root='./data', download=True, transform=transform)
-train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=128, num_workers=0)
+train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=64, num_workers=0)
 
-net = ResnetHypernet()
+net = ResNetWithHyperNet().to('cuda')
 loss_fn = nn.CrossEntropyLoss()
 
 epochs = 1000
@@ -43,8 +43,8 @@ for epoch in range(epochs):
     before = list(torch.clone(p.data) for p in net.hypernet.parameters())
 
     for batch_idx, batch_data in enumerate(train_dataloader):
-        inputs = batch_data[0]
-        labels = batch_data[1]
+        inputs = batch_data[0].to('cuda')
+        labels = batch_data[1].to('cuda')
 
         outputs = net(inputs)
         loss = loss_fn(outputs, labels)
@@ -61,7 +61,7 @@ for epoch in range(epochs):
         print('{}/{}: {}'.format(batch_idx + 1, len(train_dataloader), running_loss))
 
     # after
-    after = list(p.data for p in net.hyp_net.parameters())
+    after = list(p.data for p in net.hypernet.parameters())
 
     for idx_p, _ in enumerate(after):
         print(torch.equal(after[idx_p], before[idx_p]))
@@ -74,8 +74,8 @@ for epoch in range(epochs):
     net.eval()
     with torch.no_grad():
         for batch_idx, batch_data in enumerate(train_dataloader):
-            inputs = batch_data[0]
-            labels = batch_data[1]
+            inputs = batch_data[0].to('cuda')
+            labels = batch_data[1].to('cuda')
 
             outputs = net(inputs)
             loss = loss_fn(outputs, labels)
