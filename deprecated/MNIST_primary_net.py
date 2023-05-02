@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from hypernetwork_modules import HyperNetwork, Embedding
-from ResNetFunctional import ResNetBlock
+from utils.ResNetFunctional import ResNetBlock
 
 
 class MNIST_PRIMARY_NET(nn.Module):

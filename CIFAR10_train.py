@@ -8,7 +8,7 @@ from torchvision.datasets import CIFAR10
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import PolynomialLR
 
-from ResNetFunctional import ResnetHypernet, ResNetWithHyperNet
+from utils.ResNetFunctional import ResnetHypernet, ResNetWithHyperNet
 
 
 transform = T.Compose([T.Resize((320, 320)),
@@ -17,7 +17,7 @@ transform = T.Compose([T.Resize((320, 320)),
 train_dataset = CIFAR10(train=True, root='./data', download=True, transform=transform)
 train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=64, num_workers=0)
 
-net = ResNetWithHyperNet().to('cuda')
+net = ResNetWithHyperNet(cached_layers=False).to('cuda')
 loss_fn = nn.CrossEntropyLoss()
 
 epochs = 1000

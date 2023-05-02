@@ -133,8 +133,11 @@ class ResnetHypernet(nn.Module):
 
 
 class ResnetForHypernet(nn.Module):
-    def __init__(self, in_channels: int = 3, num_classes: int = 10, type: str = 'resnet18', ):
+    def __init__(self, in_channels: int = 3, num_classes: int = 10, type: str = 'resnet18', cached_layers: bool = True):
         super(ResnetForHypernet, self).__init__()
+
+        self.cached_layers = cached_layers
+
         if type == 'resnet18':
             self.resnet_channels = [(64, 64), (64, 128), (128, 256), (256, 512)]
             self.resnet_strides = [1, 2, 2, 2]
@@ -159,28 +162,50 @@ class ResnetForHypernet(nn.Module):
         self.fc = nn.Linear(in_features=512, out_features=num_classes)
 
     def forward(self, x: torch.Tensor, embeddings_list: nn.ModuleList, hypernet: nn.Module):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.pool(x)
+        if self.cached_layers:
+            layer_id = 2
+            cached_layers = dict()
+            x = self.conv1(x)   # 0
+            x = self.bn1(x)     # 1
+            x = self.relu(x)    # 2
+            cached_layers[layer_id] = x
+            x = self.pool(x)
 
-        for block_idx, _ in enumerate(self.resnet_blocks):
-            weights = []
-            for emb_idx in range(block_idx * 4, (block_idx + 1) * 4):
-                weights.append(embeddings_list[emb_idx](hypernet))
+            layer_id +=2
+            for block_idx, _ in enumerate(self.resnet_blocks):
+                weights = []
+                for emb_idx in range(block_idx * 4, (block_idx + 1) * 4):
+                    weights.append(embeddings_list[emb_idx](hypernet))
 
-            x = self.resnet_blocks[block_idx](x, weights)
+                x = self.resnet_blocks[block_idx](x, weights)
+                cached_layers[layer_id] = x
+                layer_id += 1
 
-        x = self.avgpool(x)
-        x = x.view(x.shape[0], x.shape[1])
-        x = self.fc(x)
+            return cached_layers
+        else:
+            x = self.conv1(x)  # 0
+            x = self.bn1(x)  # 1
+            x = self.relu(x)  # 2
+            x = self.pool(x)
 
-        return x
+            for block_idx, _ in enumerate(self.resnet_blocks):
+                weights = []
+                for emb_idx in range(block_idx * 4, (block_idx + 1) * 4):
+                    weights.append(embeddings_list[emb_idx](hypernet))
+
+                x = self.resnet_blocks[block_idx](x, weights)
+
+            x = self.avgpool(x)
+            x = x.view(x.shape[0], x.shape[1])
+            x = self.fc(x)
+
+            return x
 
 
 class ResNetWithHyperNet(nn.Module):
-    def __init__(self):
+    def __init__(self, cached_layers: bool = True, num_classes: int = 10):
         super(ResNetWithHyperNet, self).__init__()
+        self.cached_layers = cached_layers
 
         self.hypernet = HyperNetwork()
 
@@ -190,17 +215,18 @@ class ResNetWithHyperNet(nn.Module):
         for emb_idx, _ in enumerate(self.embeddings_sizes):
             self.embeddings_list.append(Embedding(z_num=self.embeddings_sizes[emb_idx], z_dim=64))
 
-        self.resnet = ResnetForHypernet()
+        self.resnet = ResnetForHypernet(cached_layers=self.cached_layers, num_classes=num_classes)
 
     def forward(self, x: torch.Tensor):
         return self.resnet.forward(x=x, embeddings_list=self.embeddings_list, hypernet=self.hypernet)
 
 def main():
-    model = ResnetHypernet()
+    model = ResNetWithHyperNet(cached_layers=False)
     x = torch.randn(size=(1, 3, 320, 320))
     x = model(x)
 
-    print(x.shape)
+    # print(len(x.keys()))
+    print(x)
 
 
 if __name__ == '__main__':
