@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from hypernetwork_modules import HyperNetwork, Embedding
-from ResNetFunctional import ResnetForHypernet
-from decoding_heads import Model_Decoder_Head
+from utils.hypernetwork_modules import HyperNetwork, Embedding
+from utils.ResNetFunctional import ResnetForHypernet
+from utils.decoding_heads import Model_Decoder_Head
 
 
 class Model_RGBDNet_Hypernet(nn.Module):
@@ -37,7 +37,7 @@ class Model_RGBDNet_Hypernet(nn.Module):
         model_params = sum(np.prod(p.size()) for p in model_params)
         print('Depth backbone params', model_params)
 
-        self.decoding_head = Model_Decoder_Head(num_classes=num_classes)
+        self.decoding_head = Model_Decoder_Head(num_classes=num_classes, skip_connections=True)
 
         model_params = filter(lambda p: p.requires_grad, self.decoding_head.parameters())
         model_params = sum(np.prod(p.size()) for p in model_params)

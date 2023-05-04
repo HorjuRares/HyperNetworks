@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from hypernetwork_modules import Embedding, HyperNetwork
+from utils.hypernetwork_modules import Embedding, HyperNetwork
 
 
 class Downsample(nn.Sequential):
