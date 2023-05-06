@@ -89,9 +89,13 @@ class Dataset_SegmentationRGBD(Dataset):
         semantic = semantic[:, :, 0]  # Semantic segmentation images need to be 1-channeled
 
         if self.width != -1 and self.height != -1:
-            rgb_img = cv2.resize(rgb_img, (self.width, self.height), interpolation=cv2.INTER_NEAREST)
+            rgb_img = np.resize(rgb_img, (self.width, self.height, 3))  # .resize(rgb_img, (self.width, self.height), interpolation=cv2.INTER_NEAREST)
             depth_img = cv2.resize(depth_img, (self.width, self.height), interpolation=cv2.INTER_NEAREST)
             semantic = cv2.resize(semantic, (self.width, self.height), interpolation=cv2.INTER_NEAREST)
+
+        if rgb_img.shape != (320, 320, 3):
+            print(rgb_img.shape)
+            print('AAAAA')
 
         rgb_images = [rgb_img]
         rgb_images = transform_imagesbatch(rgb_images, self.transforms)
@@ -101,9 +105,7 @@ class Dataset_SegmentationRGBD(Dataset):
 
         return {"rgb": rgb_img_tensor[0],
                 "depth": depth_img,
-                "semantic": semantic,
-                "original_img": rgb_img_copy,
-                "original_depth": depth_img_orig}
+                "semantic": semantic}
 
     def __len__(self):
         return len(self.labels_files)

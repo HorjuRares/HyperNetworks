@@ -25,7 +25,7 @@ class Model_Decoder_Head(nn.Module):
             self.neck = nn.Sequential(Conv(1024, 768),
                                       nn.Conv2d(in_channels=768, out_channels=512, kernel_size=1),
                                       nn.BatchNorm2d(num_features=512),
-                                      nn.LeakyReLU(inplace=True))
+                                      nn.PReLU())
 
             self.decoder_01 = Conv(512, 256)
             self.decoder_02 = Conv(256, 128)
@@ -36,34 +36,34 @@ class Model_Decoder_Head(nn.Module):
             self.final_conv = nn.Conv2d(16, self.num_classes, kernel_size=1)
         else:
             if self.backbone_type == "resnet18":
-                self.skip_connection_01 = nn.Sequential(Conv(1024, 768),
-                                                        nn.Conv2d(in_channels=768, out_channels=512, kernel_size=1),
+                self.skip_connection_01 = nn.Sequential(nn.Conv2d(in_channels=1024, out_channels=512,
+                                                                  kernel_size=3, padding=1),
                                                         nn.BatchNorm2d(num_features=512),
-                                                        nn.LeakyReLU(inplace=True))
+                                                        nn.PReLU())
                 self.decoder_01 = Conv(512, 256)
 
-                self.skip_connection_02 = nn.Sequential(Conv(512, 384),
-                                                        nn.Conv2d(in_channels=384, out_channels=256, kernel_size=1),
+                self.skip_connection_02 = nn.Sequential(nn.Conv2d(in_channels=512, out_channels=256,
+                                                                  kernel_size=3, padding=1),
                                                         nn.BatchNorm2d(num_features=256),
-                                                        nn.LeakyReLU(inplace=True))
+                                                        nn.PReLU())
                 self.decoder_02 = Conv(512, 128)
 
-                self.skip_connection_03 = nn.Sequential(Conv(256, 192),
-                                                        nn.Conv2d(in_channels=192, out_channels=128, kernel_size=1),
+                self.skip_connection_03 = nn.Sequential(nn.Conv2d(in_channels=256, out_channels=128,
+                                                                  kernel_size=3, padding=1),
                                                         nn.BatchNorm2d(num_features=128),
-                                                        nn.LeakyReLU(inplace=True))
+                                                        nn.PReLU())
                 self.decoder_03 = Conv(256, 64)
 
-                self.skip_connection_04 = nn.Sequential(Conv(128, 96),
-                                                        nn.Conv2d(in_channels=96, out_channels=64, kernel_size=1),
+                self.skip_connection_04 = nn.Sequential(nn.Conv2d(in_channels=128, out_channels=64,
+                                                                  kernel_size=3, padding=1),
                                                         nn.BatchNorm2d(num_features=64),
-                                                        nn.LeakyReLU(inplace=True))
+                                                        nn.PReLU())
                 self.decoder_04 = Conv(128, 64)
 
-                self.skip_connection_05 = nn.Sequential(Conv(128, 96),
-                                                        nn.Conv2d(in_channels=96, out_channels=64, kernel_size=1),
+                self.skip_connection_05 = nn.Sequential(nn.Conv2d(in_channels=128, out_channels=64,
+                                                                  kernel_size=3, padding=1),
                                                         nn.BatchNorm2d(num_features=64),
-                                                        nn.LeakyReLU(inplace=True))
+                                                        nn.PReLU())
                 self.decoder_05 = Conv(128, 64)
 
                 self.final_conv = nn.Conv2d(64, self.num_classes, kernel_size=1)
