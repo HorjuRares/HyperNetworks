@@ -10,7 +10,6 @@ For any commercial applications, details and software licensing,
 please contact Prof. Sorin Grigorescu (s.grigorescu@unitbv.ro)
 """
 
-from absl import app, flags
 import os
 import io, libconf
 import numpy as np
