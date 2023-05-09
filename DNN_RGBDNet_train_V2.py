@@ -19,8 +19,8 @@ from RovisToolkit.object_classes import ObjectClasses
 NUM_CLASSES = 3
 
 
-database_train = [{'path': r'C:/dev/Kinect_converted', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
-database_test = [{'path': r'C:/dev/Kinect_converted', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
+database_train = [{'path': r'C:/Databases/Kinect_converted', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
+database_test = [{'path': r'C:/Databases/Kinect_converted', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
 
 train_dataset = Dataset_SegmentationRGBD(rovis_databases=database_train,
                                          width=320, height=320)
@@ -33,13 +33,13 @@ test_dataloader = DataLoader(test_dataset, shuffle=True, batch_size=16, num_work
 net = Model_RGBDNet_Hypernet(num_classes=NUM_CLASSES).to('cuda')
 loss_fn = torch.nn.NLLLoss(reduction='mean').to('cuda')
 
-epochs = 1000
+epochs = 1001
 lr = 0.003
 
 optimizer = optim.Adam(params=net.parameters(), lr=lr, weight_decay=0)
 lr_scheduler = PolynomialLR(optimizer=optimizer, total_iters=20000, power=0.9)
 
-colormap = ObjectClasses(r'C:/dev/Kinect_converted/datastream_2/object_classes.conf').colormap()
+colormap = ObjectClasses(r'C:/Databases/Kinect_converted/datastream_2/object_classes.conf').colormap()
 
 for epoch in range(epochs):
     training_loss = 0
@@ -89,6 +89,8 @@ for epoch in range(epochs):
     print('Validation loop...')
 
     net.eval()
+    net.create_weights()
+
     with torch.no_grad():
         for batch_idx, batch_data in enumerate(test_dataloader):
             imgs_rgb = batch_data['rgb'].to(device='cuda', dtype=torch.float32)
@@ -111,18 +113,30 @@ for epoch in range(epochs):
 
             for i in range(outputs.shape[0]):
                 semseg_output = outputs[i].detach().cpu().numpy()
-                # img_rgb_orig = cv2.resize(torch.transpose(batch_data['rgb'][i], (2, 0, 1)).detach().cpu().numpy(),
-                #                           (outputs.shape[-2], outputs.shape[-1]))
+
+                # img_rgb_orig = cv2.resize(imgs_rgb[i].detach().cpu().numpy(), (outputs.shape[-2], outputs.shape[-1]))
 
                 semseg_display = decode_semseg(semseg_output, colormap)
                 # img_display = cv2.addWeighted(img_rgb_orig.astype(np.float32), 0.6,
                 #                               semseg_display.astype(np.float32), 0.5, 0.0)
 
-                cv2.imshow('Validation', semseg_display)
-                cv2.waitKey(10)
+                # cv2.imshow('Validation_rgb', img_rgb_orig)
+                cv2.imshow('Validation_depth', semseg_display)
+                cv2.waitKey(1)
 
         print('Finished validation')
         print('Validation loss:', validation_loss)
         print('Validation global:', validation_global / len(test_dataloader))
         print('Validation mean:', validation_mean / len(test_dataloader))
         print('Validation IoU:', validation_IoU / len(test_dataloader))
+
+    if epoch % 10 == 0:
+        torch.save(
+            {
+                'model_state_dict': net.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'lr_scheduler_state_dict': lr_scheduler.state_dict(),
+                'epoch': epoch,
+                'loss': running_loss
+            },
+        r'ckpts/RGBD_Net_weights_epoch_{}.pth'.format(epoch))

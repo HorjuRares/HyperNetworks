@@ -60,7 +60,7 @@ def metrics_IoU(ground_truth, prediction, num_classes):
         FP = np.count_nonzero(np.logical_and(prediction != ground_truth, prediction == c))
         FN = np.count_nonzero(np.logical_and(prediction == ground_truth, prediction != c))
 
-        sum += TP / (TP + FP + FN)
+        sum += TP / (TP + FP + FN + 1e-5)
 
     return (sum / num_classes) * 100
 

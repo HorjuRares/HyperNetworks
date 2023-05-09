@@ -58,7 +58,13 @@ class RGBD_Decoder_functional(nn.Module):
             nn.PReLU())
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
 
-    def forward(self, x: torch.Tensor, embeddings_list: nn.ModuleList, hypernet: nn.Module):
+    def forward(self, x: torch.Tensor, embeddings_list: nn.ModuleList, hypernet: nn.Module, weights: list):
+        if self.training:
+            return self.forward_training(x=x, embeddings_list=embeddings_list, hypernet=hypernet)
+        else:
+            return self.forward_evaluating(x=x, weights=weights)
+
+    def forward_training(self, x: torch.Tensor, embeddings_list: nn.ModuleList, hypernet: nn.Module):
         x1 = self.skip_connection_05(x[2])
         x2 = self.skip_connection_04(x[4])
         x3 = self.skip_connection_03(x[5])
@@ -68,6 +74,37 @@ class RGBD_Decoder_functional(nn.Module):
         weights = list()
         for emb_idx, _ in enumerate(embeddings_list):
             weights.append(embeddings_list[emb_idx](hypernet))
+
+        x = self.decoder_01(x5, w_conv=weights[0])
+        x = self.upsample(x)
+        x = torch.cat([x, x4], dim=1)
+
+        x = self.decoder_02(x, w_conv=weights[1])
+        x = self.upsample(x)
+        x = torch.cat([x, x3], dim=1)
+
+        x = self.decoder_03(x, w_conv=weights[2])
+        x = self.upsample(x)
+        x = torch.cat([x, x2], dim=1)
+
+        x = self.decoder_04(x, w_conv=weights[3])
+        x = self.upsample(x)
+        x = torch.cat([x, x1], dim=1)
+
+        x = self.decoder_05(x, w_conv=weights[4])
+        x = self.upsample(x)
+
+        x = self.final_conv(x)
+        x = nn.LogSoftmax(dim=1)(x)
+
+        return x
+
+    def forward_evaluating(self, x: torch.Tensor, weights: list):
+        x1 = self.skip_connection_05(x[2])
+        x2 = self.skip_connection_04(x[4])
+        x3 = self.skip_connection_03(x[5])
+        x4 = self.skip_connection_02(x[6])
+        x5 = self.skip_connection_01(x[7])
 
         x = self.decoder_01(x5, w_conv=weights[0])
         x = self.upsample(x)
@@ -113,4 +150,4 @@ if __name__ == '__main__':
         7: torch.rand((1, 1024, 10, 10), dtype=torch.float32)
     }
 
-    print(model(x, embeddings_list, hypernet))
+    print(model(x, embeddings_list, hypernet, []))
