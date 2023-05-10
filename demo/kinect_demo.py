@@ -19,16 +19,11 @@ if __name__ == '__main__':
     device_torch = 'cuda' if torch.cuda.is_available() else 'cpu'
     # device_torch = 'cpu'
 
-    checkpoint = torch.load(r'../ckpts/RGBD_Net_weights_epoch_200.pth')
+    checkpoint = torch.load(r'../ckpts/RGBD_Net_weights_epoch_60.pth')
     colormap = ObjectClasses(r'C:/Databases/Kinect_converted/datastream_2/object_classes.conf').colormap()
 
     dnn = Model_RGBDNet_Hypernet(num_classes=3).to(device_torch)
-    before = list(torch.clone(p.data) for p in dnn.depth_embeddings_list.parameters())
     dnn.load_state_dict(checkpoint['model_state_dict'])
-    after = list(p.data for p in dnn.depth_embeddings_list.parameters())
-    for idx_p, _ in enumerate(after):
-        print(torch.equal(after[idx_p], before[idx_p]))
-
     dnn.eval()
     dnn.create_weights()
 
@@ -45,28 +40,34 @@ if __name__ == '__main__':
 
     with torch.no_grad():
         while True:
-            dmap = np.frombuffer(depth_stream.read_frame().get_buffer_as_uint16(),
-                                 dtype=np.uint16).reshape(1, 1, 480, 640)
-            rgb = np.frombuffer(color_stream.read_frame().get_buffer_as_uint8(),
-                                dtype=np.uint8).reshape(1, 480, 640, 3)
-            rgb = rgb / np.max(rgb)
+            depth_img = np.frombuffer(depth_stream.read_frame().get_buffer_as_uint16(),
+                                      dtype=np.uint16).reshape(480, 640) / 1000.
+            rgb_img = np.frombuffer(color_stream.read_frame().get_buffer_as_uint8(),
+                                    dtype=np.uint8).reshape(480, 640, 3)
 
-            # inference part goes right here
-            rgb_tensor = torch.from_numpy(rgb).to(device=device_torch, dtype=torch.float32)
-            rgb_tensor = torch.permute(rgb_tensor, dims=(0, 3, 1, 2))
-            depth_tensor = torch.from_numpy(dmap / 1000.).to(device=device_torch, dtype=torch.float32)
+            rgb_img = cv2.resize(rgb_img, (320, 320), interpolation=cv2.INTER_NEAREST)
+            depth_img = cv2.resize(depth_img, (320, 320), interpolation=cv2.INTER_NEAREST)
 
-            input = torch.cat((depth_tensor, rgb_tensor), dim=1)
+            rgb_img = np.expand_dims(rgb_img, axis=0).astype(np.float32)
+            depth_img = np.expand_dims(depth_img, axis=0)
+
+            if np.max(rgb_img) > 1:
+                rgb_img /= 255.
+
+            rgb_img = np.ascontiguousarray(nhwc_2_nchw(rgb_img))
+
+            imgs_rgb = torch.tensor(rgb_img).to(device='cuda', dtype=torch.float32)
+            imgs_depth = torch.unsqueeze(torch.tensor(depth_img), dim=1).to(device='cuda', dtype=torch.float32)
+            inputs = torch.cat(tensors=(imgs_depth, imgs_rgb), dim=1)
 
             start_inference_time = time.time()
-            output = dnn(input)
+            outputs = dnn(inputs)
             print('inference took:', time.time() - start_inference_time)
 
-            semseg_out = cv2.resize(decode_semseg(output[0].detach().cpu().numpy(), colormap),
+            semseg_out = cv2.resize(decode_semseg(outputs[0].detach().cpu().numpy(), colormap),
                                     tuple([640, 480]),
                                     interpolation=cv2.INTER_NEAREST)
 
-            cv2.imshow('rgb', rgb[0])
             cv2.imshow('semseg', semseg_out)
             cv2.waitKey(1)
 

@@ -16,19 +16,19 @@ from RovisToolkit.image_utils import decode_semseg
 from RovisToolkit.object_classes import ObjectClasses
 
 
-NUM_CLASSES = 3
+NUM_CLASSES = 38
 
 
-database_train = [{'path': r'C:/Databases/Kinect_converted', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
-database_test = [{'path': r'C:/Databases/Kinect_converted', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
+database_train = [{'path': r'C:/Databases/SUN_RGBD_train', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
+database_test = [{'path': r'C:/Databases/SUN_RGBD_test', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
 
 train_dataset = Dataset_SegmentationRGBD(rovis_databases=database_train,
                                          width=320, height=320)
-train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=0)
+train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=8, num_workers=0)
 
 test_dataset = Dataset_SegmentationRGBD(rovis_databases=database_test,
                                         width=320, height=320)
-test_dataloader = DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=0)
+test_dataloader = DataLoader(test_dataset, shuffle=True, batch_size=8, num_workers=0)
 
 net = Model_RGBDNet_Hypernet(num_classes=NUM_CLASSES).to('cuda')
 loss_fn = torch.nn.NLLLoss(reduction='mean').to('cuda')
@@ -139,4 +139,4 @@ for epoch in range(epochs):
                 'epoch': epoch,
                 'loss': running_loss
             },
-        r'ckpts/RGBD_Net_weights_epoch_{}.pth'.format(epoch))
+        r'ckpts/RGBD_Net_weights_SUN_RGBD_epoch_{}.pth'.format(epoch))
