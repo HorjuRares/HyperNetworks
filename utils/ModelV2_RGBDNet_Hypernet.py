@@ -60,11 +60,11 @@ class Model_RGBDNet_Hypernet(nn.Module):
         #                                    for emb_idx, _ in enumerate(self.depth_embeddings_list)]
 
     def create_weights(self):
-        self.depth_backbone_weights = [self.depth_embeddings_list[emb_idx](self.Hypernet)
+        self.depth_backbone_weights = [self.depth_embeddings_list[emb_idx](self.Hypernet).detach()
                                        for emb_idx, _ in enumerate(self.depth_embeddings_list)]
-        self.rgb_backbone_weights = [self.rgb_embeddings_list[emb_idx](self.Hypernet)
+        self.rgb_backbone_weights = [self.rgb_embeddings_list[emb_idx](self.Hypernet).detach()
                                      for emb_idx, _ in enumerate(self.rgb_embeddings_list)]
-        self.decoder_weights = [self.decoding_head_embeddings_list[emb_idx](self.Hypernet)
+        self.decoder_weights = [self.decoding_head_embeddings_list[emb_idx](self.Hypernet).detach()
                                 for emb_idx, _ in enumerate(self.decoding_head_embeddings_list)]
 
     def forward(self, x: torch.Tensor):

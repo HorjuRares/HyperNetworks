@@ -16,19 +16,19 @@ from RovisToolkit.image_utils import decode_semseg
 from RovisToolkit.object_classes import ObjectClasses
 
 
-NUM_CLASSES = 38
+NUM_CLASSES = 3
 
 
-database_train = [{'path': r'C:/Databases/SUN_RGBD_train', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
-database_test = [{'path': r'C:/Databases/SUN_RGBD_test', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
+database_train = [{'path': r'C:/Databases/Kinect_converted', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
+database_test = [{'path': r'C:/Databases/Kinect_converted', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
 
 train_dataset = Dataset_SegmentationRGBD(rovis_databases=database_train,
                                          width=320, height=320)
-train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=8, num_workers=0)
+train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=0)
 
 test_dataset = Dataset_SegmentationRGBD(rovis_databases=database_test,
                                         width=320, height=320)
-test_dataloader = DataLoader(test_dataset, shuffle=True, batch_size=8, num_workers=0)
+test_dataloader = DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=0)
 
 net = Model_RGBDNet_Hypernet(num_classes=NUM_CLASSES).to('cuda')
 loss_fn = torch.nn.NLLLoss(reduction='mean').to('cuda')
@@ -42,11 +42,29 @@ lr_scheduler = PolynomialLR(optimizer=optimizer, total_iters=20000, power=0.9)
 colormap = ObjectClasses(r'C:/Databases/Kinect_converted/datastream_2/object_classes.conf').colormap()
 
 # load checkpoint
-checkpoint = torch.load(r'ckpts/RGBD_Net_weights_SUN_RGBD_epoch_10.pth')
+checkpoint = torch.load(r'ckpts/RGBD_Net_weights_epoch_60.pth')
 net.load_state_dict(checkpoint['model_state_dict'])
+net.create_weights()
 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 lr_scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
 start_epoch = checkpoint['epoch'] + 1
+
+# export the model to onnx
+# assert checkpoint is not None or len(checkpoint.keys()) > 0
+#
+# channels = 4
+# in_tensor_width = 320
+# in_tensor_height = 320
+# x = torch.rand(16, channels, in_tensor_height, in_tensor_width).to('cuda')
+#
+# torch.onnx.export(net,
+#                   x,
+#                   'DNN_RGBDNet_Hypernet_cuda.onnx',
+#                   opset_version=12,
+#                   input_names=["input"],
+#                   output_names=["output"],
+#                   dynamic_axes={"input": {0: "batch_size"},
+#                                 "output": {0: "batch_size"}})
 
 for epoch in range(start_epoch, epochs):
     training_loss = 0
