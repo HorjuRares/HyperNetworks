@@ -41,7 +41,14 @@ lr_scheduler = PolynomialLR(optimizer=optimizer, total_iters=20000, power=0.9)
 
 colormap = ObjectClasses(r'C:/Databases/Kinect_converted/datastream_2/object_classes.conf').colormap()
 
-for epoch in range(epochs):
+# load checkpoint
+checkpoint = torch.load(r'ckpts/RGBD_Net_weights_SUN_RGBD_epoch_10.pth')
+net.load_state_dict(checkpoint['model_state_dict'])
+optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+lr_scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
+start_epoch = checkpoint['epoch'] + 1
+
+for epoch in range(start_epoch, epochs):
     training_loss = 0
     validation_loss = 0
 

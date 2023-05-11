@@ -101,14 +101,10 @@ class Dataset_SegmentationRGBD(Dataset):
             print(rgb_img.shape)
             print('AAAAA')
 
-        rgb_alt_tensor = torch.unsqueeze(torch.from_numpy(rgb_img), dim=1)
-
         rgb_images = [rgb_img]
         rgb_images = transform_imagesbatch(rgb_images, self.transforms)
         rgb_img_tensor = imagebatch_2_tensor(rgb_images, self.device)
         rgb_img_tensor = transform_tensorbatch(rgb_img_tensor, self.transforms)
-
-        assert torch.equal(rgb_alt_tensor, rgb_img_tensor)
 
         return {"rgb": rgb_img_tensor[0],
                 "depth": depth_img,
