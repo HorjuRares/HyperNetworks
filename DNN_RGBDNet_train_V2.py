@@ -16,19 +16,19 @@ from RovisToolkit.image_utils import decode_semseg
 from RovisToolkit.object_classes import ObjectClasses
 
 
-NUM_CLASSES = 3
+NUM_CLASSES = 38
 
 
-database_train = [{'path': r'C:/Databases/Kinect_converted', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
-database_test = [{'path': r'C:/Databases/Kinect_converted', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
+database_train = [{'path': r'C:/Databases/SUN_RGBD_train', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
+database_test = [{'path': r'C:/Databases/SUN_RGBD_test', 'keys_samples': [(1, )], 'keys_labels': [(2, )]}]
 
 train_dataset = Dataset_SegmentationRGBD(rovis_databases=database_train,
                                          width=320, height=320)
-train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=0)
+train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=8, num_workers=0)
 
 test_dataset = Dataset_SegmentationRGBD(rovis_databases=database_test,
                                         width=320, height=320)
-test_dataloader = DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=0)
+test_dataloader = DataLoader(test_dataset, shuffle=True, batch_size=8, num_workers=0)
 
 net = Model_RGBDNet_Hypernet(num_classes=NUM_CLASSES).to('cuda')
 loss_fn = torch.nn.NLLLoss(reduction='mean').to('cuda')
@@ -39,10 +39,10 @@ lr = 0.003
 optimizer = optim.Adam(params=net.parameters(), lr=lr, weight_decay=0)
 lr_scheduler = PolynomialLR(optimizer=optimizer, total_iters=20000, power=0.9)
 
-colormap = ObjectClasses(r'C:/Databases/Kinect_converted/datastream_2/object_classes.conf').colormap()
+colormap = ObjectClasses(r'C:/Databases/SUN_RGBD_train/datastream_2/object_classes.conf').colormap()
 
 # load checkpoint
-checkpoint = torch.load(r'ckpts/RGBD_Net_weights_epoch_60.pth')
+checkpoint = torch.load(r'ckpts/RGBD_Net_weights_SUN_RGBD_epoch_0.pth')
 net.load_state_dict(checkpoint['model_state_dict'])
 net.create_weights()
 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -66,7 +66,7 @@ start_epoch = checkpoint['epoch'] + 1
 #                   dynamic_axes={"input": {0: "batch_size"},
 #                                 "output": {0: "batch_size"}})
 
-for epoch in range(start_epoch, epochs):
+for epoch in range(0, epochs):
     training_loss = 0
     validation_loss = 0
 
@@ -155,7 +155,7 @@ for epoch in range(start_epoch, epochs):
         print('Validation mean:', validation_mean / len(test_dataloader))
         print('Validation IoU:', validation_IoU / len(test_dataloader))
 
-    if epoch % 10 == 0:
+    if epoch % 2 == 0:
         torch.save(
             {
                 'model_state_dict': net.state_dict(),
