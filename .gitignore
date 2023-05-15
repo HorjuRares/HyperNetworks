@@ -104,3 +104,4 @@ venv.bak/
 .mypy_cache/
 
 .idea
+data/MNIST/raw/train-images-idx3-ubyte.gz
