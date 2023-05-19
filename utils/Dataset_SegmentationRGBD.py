@@ -83,8 +83,6 @@ class Dataset_SegmentationRGBD(Dataset):
         rgb_img = cv2.imread(self.rgb_samples_files[item])
 
         rgb_img_copy = rgb_img.copy()
-        # cv2.imshow('trial1', rgb_img_copy)
-        # cv2.waitKey(0)
 
         depth_img_orig = cv2.imread(self.depth_samples_files[item])
         depth_img = decode_depth(depth_img_orig, 16777.216)

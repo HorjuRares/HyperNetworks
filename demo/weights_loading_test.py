@@ -18,11 +18,13 @@ from RovisToolkit.image_display_utils import *
 from RovisToolkit.object_classes import ObjectClasses
 from utils.Dataset_SegmentationRGBD import Dataset_SegmentationRGBD
 from RovisToolkit.image_utils import decode_depth
+from torchvision.models.segmentation import deeplabv3_resnet50
+from utils.performance_metrics import *
 
 
 def test_dataset():
-    colormap = ObjectClasses(r'C:/Databases/Kinect_converted/datastream_2/object_classes.conf').colormap()
-    database_test = [{'path': r'C:/Databases/Kinect_converted', 'keys_samples': [(1,)], 'keys_labels': [(2,)]}]
+    colormap = ObjectClasses(r'C:/Databases/CarlaDepthTest/datastream_4/object_classes.conf').colormap()
+    database_test = [{'path': r'C:/Databases/CarlaDepthTest', 'keys_samples': [(1,)], 'keys_labels': [(4,)]}]
     test_dataset = Dataset_SegmentationRGBD(rovis_databases=database_test,
                                             width=320, height=320)
     test_dataloader = DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=0)
@@ -101,10 +103,10 @@ def test_onnx_prediction():
     depth_path = r'C:/Databases/Kinect_converted/datastream_1/samples/0/right'
     colormap = ObjectClasses(r'C:/Databases/Kinect_converted/datastream_2/object_classes.conf').colormap()
 
-    model = onnx.load(r'../DNN_RGBDNet_Hypernet_cpu.onnx')
+    model = onnx.load(r'DNN_DeepLab_Hypernet_cpu.onnx')
 
     onnx.checker.check_model(model)
-    onnx_inference_session = onnxruntime.InferenceSession(r'../DNN_RGBDNet_Hypernet_cpu.onnx',
+    onnx_inference_session = onnxruntime.InferenceSession(r'DNN_DeepLab_Hypernet_cpu.onnx',
                                                           providers=['CPUExecutionProvider'])
     inputs = onnx_inference_session.get_inputs()
 
@@ -131,7 +133,7 @@ def test_onnx_prediction():
         input = torch.cat(tensors=(imgs_depth, imgs_rgb), dim=1)
 
         start_time = time.time()
-        outputs = onnx_inference_session.run(None, {inputs[0].name: input.detach().numpy()})
+        outputs = onnx_inference_session.run(None, {inputs[0].name: imgs_rgb.detach().numpy()})
         inference_time += time.time() - start_time
 
         semseg_display = decode_semseg(outputs[0][0], colormap)
@@ -142,7 +144,125 @@ def test_onnx_prediction():
     print('Average inference time:', inference_time / len(os.listdir(rgb_path)))
 
 
+def test_dataset_deep():
+    best_global = -1
+    best_mean = -1
+    best_IoU = -1
+
+    NUM_CLASSES=3
+    colormap = ObjectClasses(r'C:/Databases/CarlaDepthTest/datastream_4/object_classes.conf').colormap()
+
+    database_test = [{'path': r'C:/Databases/CarlaDepthTest', 'keys_samples': [(1,)], 'keys_labels': [(4,)]}]
+    test_dataset = Dataset_SegmentationRGBD(rovis_databases=database_test,
+                                            width=320, height=320)
+    test_dataloader = DataLoader(test_dataset, shuffle=True, batch_size=4, num_workers=0)
+
+    dnn = deeplabv3_resnet50(weights=None, num_classes=NUM_CLASSES).to('cpu')
+    loss_fn = torch.nn.CrossEntropyLoss(reduction='mean').to('cpu')
+    optimizer = torch.optim.Adam(params=dnn.parameters(), lr=0.003, weight_decay=0)
+    lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer=optimizer, total_iters=20000, power=0.9)
+
+    for epoch in range(0, 1001):
+        training_loss = 0
+        validation_loss = 0
+
+        validation_global = 0
+        validation_mean = 0
+        validation_IoU = 0
+
+        # training
+        print('Training epoch {}'.format(epoch))
+
+        dnn.train()
+
+        for batch_idx, batch_data in enumerate(test_dataloader):
+            imgs_rgb = batch_data['rgb'].to(device='cpu', dtype=torch.float32)
+            imgs_depth = torch.unsqueeze(batch_data['depth'].to(device='cpu', dtype=torch.float32), dim=1)
+            labels = batch_data['semantic'].to('cpu').long()
+            inputs = torch.cat(tensors=(imgs_depth, imgs_rgb), dim=1)
+
+            outputs = dnn(imgs_rgb)
+            loss = loss_fn(outputs['out'], labels)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            lr_scheduler.step()
+
+            running_loss = loss.detach().cpu().numpy()
+            training_loss += running_loss
+
+            print('{}/{}: {}'.format(batch_idx + 1, len(test_dataloader), running_loss))
+
+        print('Training loss: {}'.format(training_loss))
+
+        # validation
+        print('Validation loop...')
+
+        dnn.eval()
+
+        with torch.no_grad():
+            for batch_idx, batch_data in enumerate(test_dataloader):
+                imgs_rgb = batch_data['rgb'].to(device='cpu', dtype=torch.float32)
+                imgs_depth = torch.unsqueeze(batch_data['depth'].to(device='cpu', dtype=torch.float32), dim=1)
+                labels = batch_data['semantic'].to('cpu').long()
+                inputs = torch.cat(tensors=(imgs_depth, imgs_rgb), dim=1)
+
+                outputs = dnn(imgs_rgb)
+                loss = loss_fn(outputs['out'], labels)
+
+                running_loss = loss.detach().cpu().numpy()
+                validation_loss += running_loss
+
+                validation_global += metrics_global_accuracy(ground_truth=torch.unsqueeze(labels, dim=1),
+                                                             prediction=outputs['out'])
+                validation_mean += metrics_mean_accuracy(ground_truth=torch.unsqueeze(labels, dim=1),
+                                                         prediction=outputs['out'], num_classes=NUM_CLASSES)
+                validation_IoU += metrics_IoU(ground_truth=torch.unsqueeze(labels, dim=1),
+                                              prediction=outputs['out'], num_classes=NUM_CLASSES)
+
+                for i in range(outputs['out'].shape[0]):
+                    semseg_output = outputs['out'][i].detach().cpu().numpy()
+
+                    # img_rgb_orig = cv2.resize(imgs_rgb[i].detach().cpu().numpy(), (outputs.shape[-2], outputs.shape[-1]))
+
+                    semseg_display = decode_semseg(semseg_output, colormap)
+                    # img_display = cv2.addWeighted(img_rgb_orig.astype(np.float32), 0.6,
+                    #                               semseg_display.astype(np.float32), 0.5, 0.0)
+
+                    # cv2.imshow('Validation_rgb', img_rgb_orig)
+                    cv2.imshow('Validation_depth', semseg_display)
+                    cv2.waitKey(1)
+
+            print('Finished validation')
+            print('Validation loss:', validation_loss)
+            print('Validation global:', validation_global / len(test_dataloader))
+            print('Validation mean:', validation_mean / len(test_dataloader))
+            print('Validation IoU:', validation_IoU / len(test_dataloader))
+
+            if validation_global / len(test_dataloader):
+                best_global = validation_global / len(test_dataloader)
+            if validation_mean / len(test_dataloader):
+                best_mean = validation_mean / len(test_dataloader)
+            if validation_IoU / len(test_dataloader):
+                best_IoU = validation_IoU / len(test_dataloader)
+
+            torch.onnx.export(dnn,
+                              imgs_rgb,
+                              'DNN_DeepLab_cpu.onnx',
+                              opset_version=12,
+                              input_names=["input"],
+                              output_names=["output"],
+                              dynamic_axes={"input": {0: "batch_size"},
+                                            "output": {0: "batch_size"}})
+
+    print('best_global', best_global)
+    print('best_mean', best_mean)
+    print('best_IoU', best_IoU)
+
+
 if __name__ == '__main__':
-    # test_dataset()
+    test_dataset()
     # test_img_folder()
-    test_onnx_prediction()
+    # test_dataset_deep()
+    # test_onnx_prediction()

@@ -34,16 +34,18 @@ def metrics_mean_accuracy(ground_truth, prediction, num_classes) -> float:
     if isinstance(prediction, torch.Tensor):
         prediction = prediction.detach().cpu().numpy()
 
+    num_classes = np.unique(ground_truth)
+
     prediction = np.expand_dims(a=np.argmax(a=prediction, axis=1), axis=1)
 
     sum = 0
-    for c in range(num_classes):
+    for c in num_classes:
         TP = np.count_nonzero(np.logical_and(prediction == ground_truth, prediction == c))
         FP = np.count_nonzero(np.logical_and(prediction != ground_truth, prediction == c))
 
         sum += TP / (TP + FP + 1e-5)
 
-    return (sum / num_classes) * 100
+    return (sum / len(num_classes)) * 100
 
 
 def metrics_IoU(ground_truth, prediction, num_classes):
@@ -52,17 +54,20 @@ def metrics_IoU(ground_truth, prediction, num_classes):
     if isinstance(prediction, torch.Tensor):
         prediction = prediction.detach().cpu().numpy()
 
+    # TODO: numpy unique
+    num_classes = np.unique(ground_truth)
+
     prediction = np.expand_dims(a=np.argmax(a=prediction, axis=1), axis=1)
 
     sum = 0
-    for c in range(num_classes):
+    for c in num_classes:
         TP = np.count_nonzero(np.logical_and(prediction == ground_truth, prediction == c))
         FP = np.count_nonzero(np.logical_and(prediction != ground_truth, prediction == c))
         FN = np.count_nonzero(np.logical_and(prediction == ground_truth, prediction != c))
 
         sum += TP / (TP + FP + FN + 1e-5)
 
-    return (sum / num_classes) * 100
+    return (sum / len(num_classes)) * 100
 
 
 if __name__ == '__main__':
