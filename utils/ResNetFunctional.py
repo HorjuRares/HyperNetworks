@@ -25,9 +25,10 @@ class ResNetBasicBlock(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.bn2 = nn.BatchNorm2d(self.out_channels)
 
-        self.downsample = None
+        self.downsample = downsample
+
         if downsample:
-            self.downsample = Downsample(in_channels=in_channels, out_channels=out_channels)
+            self.downsample_layer = Downsample(in_channels=in_channels, out_channels=out_channels)
 
     def forward(self, x: torch.Tensor, w_conv1: torch.Tensor, w_conv2: torch.Tensor):
         residual = x
@@ -38,13 +39,13 @@ class ResNetBasicBlock(nn.Module):
         x = F.conv2d(input=x, weight=w_conv2, stride=1, padding=1)
         x = self.bn2(x)
 
-        if self.downsample is not None:
-            residual = self.downsample(residual)
+        if self.downsample:
+            residual = self.downsample_layer(residual)
 
         x += residual
         x = self.relu(x)
 
-        return  x
+        return x
 
 
 class ResNetBlock(nn.Module):

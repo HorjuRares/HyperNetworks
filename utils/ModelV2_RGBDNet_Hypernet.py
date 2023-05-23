@@ -7,6 +7,7 @@ from utils.hypernetwork_modules import HyperNetwork, Embedding
 from utils.ResNetFunctional import ResnetForHypernet, ResnetForHypernetV2
 from utils.decoding_heads_functional import RGBD_Decoder_functional
 
+
 class Model_RGBDNet_Hypernet(nn.Module):
     def __init__(self, num_classes: int = 5):
         super(Model_RGBDNet_Hypernet, self).__init__()
@@ -55,6 +56,7 @@ class Model_RGBDNet_Hypernet(nn.Module):
         self.depth_backbone_weights = []
         self.rgb_backbone_weights = []
         self.decoder_weights = []
+
         # if not training:
         #     self.depth_backbone_weights = [self.depth_embeddings_list[emb_idx](self.Hypernet)
         #                                    for emb_idx, _ in enumerate(self.depth_embeddings_list)]
